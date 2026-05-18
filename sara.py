@@ -21,6 +21,22 @@ colorama.init(autoreset=True)
 
 INDENT = "    "
 
+# Strip C0/C1 controls and ANSI CSI/OSC escapes from router-controlled
+# strings before we print them. RouterOS CLI output ends up inside our
+# f-strings (scheduler names, comments, NAT rule text, etc.); without
+# this, a compromised device can clear the screen, move the cursor over
+# earlier findings, recolor "[✓]" lines, or embed OSC-8 hyperlinks.
+_CTRL_RE = re.compile(
+    r"\x1b\[[ -?]*[@-~]"
+    r"|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)"
+    r"|\x1b[@-_]"
+    r"|[\x00-\x1f\x7f\x80-\x9f]"
+)
+
+
+def safe(s) -> str:
+    return _CTRL_RE.sub("?", str(s))
+
 
 # print banner
 def banner():
@@ -42,37 +58,37 @@ def banner():
 # section header
 def section(title: str):
     print()
-    print(Fore.WHITE + f"[+] {title}" + Style.RESET_ALL)
+    print(Fore.WHITE + f"[+] {safe(title)}" + Style.RESET_ALL)
 
 
 # info line
 def info(msg: str):
-    print(Fore.WHITE + INDENT + f"[*] {msg}")
+    print(Fore.WHITE + INDENT + f"[*] {safe(msg)}")
 
 
 # ok line
 def ok(msg: str):
-    print(Fore.GREEN + INDENT + f"[✓] {msg}")
+    print(Fore.GREEN + INDENT + f"[✓] {safe(msg)}")
 
 
 # warning line
 def warn(msg: str):
-    print(Fore.YELLOW + INDENT + f"[!] {msg}")
+    print(Fore.YELLOW + INDENT + f"[!] {safe(msg)}")
 
 
 # high severity line
 def alert(msg: str):
-    print(Fore.RED + INDENT + f"[!] {msg}")
+    print(Fore.RED + INDENT + f"[!] {safe(msg)}")
 
 
 # error line
 def error(msg: str):
-    print(Fore.RED + INDENT + f"[-] {msg}")
+    print(Fore.RED + INDENT + f"[-] {safe(msg)}")
 
 
 # detailed line
 def detail(msg: str):
-    print(Fore.LIGHTWHITE_EX + INDENT * 2 + f"[*] {msg}" + Style.RESET_ALL)
+    print(Fore.LIGHTWHITE_EX + INDENT * 2 + f"[*] {safe(msg)}" + Style.RESET_ALL)
 
 
 # ssh connection helper
