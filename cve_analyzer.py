@@ -4,7 +4,7 @@
 # Licensed under the Apache 2.0 License
 # This project is not affiliated with or endorsed by SIA Mikrotīkls
 
-import json, re, os, requests, time
+import json, re, os, pathlib, requests, time
 from packaging.version import Version, InvalidVersion
 from colorama import Fore, Style
 
@@ -12,8 +12,50 @@ from colorama import Fore, Style
 NVD_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 KEYWORD = "routeros"
 RESULTS_PER_PAGE = 2000
-OUTPUT_FILE = "routeros_cves.json"
 GUTTER = 2  # spaces between columns
+
+
+def cache_path() -> pathlib.Path:
+    # Store the CVE cache under XDG_CACHE_HOME (default ~/.cache) instead of
+    # the current working directory. The CWD location was vulnerable to two
+    # things: a writable CWD lets another local user plant a poisoned cache
+    # that this process then trusts, and open(..., "w") follows symlinks so
+    # running Sara as root in a shared directory could overwrite arbitrary
+    # files. The fixed location is in the invoking user's own cache tree.
+    base = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
+    d = pathlib.Path(base) / "sara"
+    d.mkdir(parents=True, exist_ok=True)
+    return d / "routeros_cves.json"
+
+
+def _open_cache_write(path: pathlib.Path):
+    # O_NOFOLLOW refuses to open the path if it is a symlink, which closes the
+    # last symlink-clobber window even if the cache directory itself becomes
+    # writable by someone else.
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW
+    fd = os.open(str(path), flags, 0o600)
+    return os.fdopen(fd, "w", encoding="utf-8")
+
+
+def _open_cache_read(path: pathlib.Path):
+    flags = os.O_RDONLY | os.O_NOFOLLOW
+    fd = os.open(str(path), flags)
+    return os.fdopen(fd, "r", encoding="utf-8")
+
+
+def _valid_cache(data) -> bool:
+    # Cheap shape check so a corrupted or hand-crafted file fails closed
+    # before the matcher walks it. cve_id and severity are the fields we
+    # actually render to the terminal.
+    if not isinstance(data, list):
+        return False
+    for entry in data:
+        if not isinstance(entry, dict):
+            return False
+        cve_id = entry.get("cve_id")
+        if not isinstance(cve_id, str) or not re.match(r"^CVE-\d{4}-\d{4,}$", cve_id):
+            return False
+    return True
 
 
 # Simple role-based color mapping
@@ -249,28 +291,39 @@ def fetch_all_cves():
             break
         time.sleep(1.5)
 
-    with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+    path = cache_path()
+    with _open_cache_write(path) as f:
         json.dump(all_cves, f, indent=2, ensure_ascii=False)
-    print(Fore.GREEN + f"[+] Saved {len(all_cves)} CVEs to {OUTPUT_FILE}")
+    print(Fore.GREEN + f"[+] Saved {len(all_cves)} CVEs to {path}")
 
 
 # Load local CVE cache and optionally refresh it
 def load_cve_data():
-    if not os.path.isfile(OUTPUT_FILE):
-        print(Fore.YELLOW + f"[!] {OUTPUT_FILE} not found.")
+    path = cache_path()
+    if not path.is_file():
+        print(Fore.YELLOW + f"[!] {path} not found.")
         fetch_all_cves()
     else:
-        print(Fore.YELLOW + f"[?] {OUTPUT_FILE} already exists.")
+        print(Fore.YELLOW + f"[?] {path} already exists.")
         answer = input(Fore.YELLOW + "    Overwrite it with fresh CVE data? [yes/no]: ").strip().lower()
         if answer == "yes":
             fetch_all_cves()
 
     try:
-        with open(OUTPUT_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception as e:
-        print(Fore.RED + f"[-] Failed to load {OUTPUT_FILE}: {e}")
+        with _open_cache_read(path) as f:
+            data = json.load(f)
+    except OSError as e:
+        # ELOOP comes back when O_NOFOLLOW finds a symlink at the cache path.
+        print(Fore.RED + f"[-] Refusing to read {path}: {e}")
         return None
+    except Exception as e:
+        print(Fore.RED + f"[-] Failed to load {path}: {e}")
+        return None
+
+    if not _valid_cache(data):
+        print(Fore.RED + f"[-] {path} does not look like a Sara CVE cache; refusing to use it")
+        return None
+    return data
 
 
 # Format CVSS score as 0.1 or N/A
