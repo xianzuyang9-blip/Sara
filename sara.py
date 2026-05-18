@@ -76,13 +76,21 @@ def detail(msg: str):
 
 
 # ssh connection helper
-def connect_to_router(ip, user, password=None, port=22, key_file=None, key_passphrase=None):
+def connect_to_router(ip, user, password=None, port=22, key_file=None, key_passphrase=None, strict_host_key=True):
     device = {
         "device_type": "mikrotik_routeros",
         "host": ip,
         "username": user,
         "port": port,
     }
+
+    # Netmiko defaults to ssh_strict=False (Paramiko AutoAddPolicy) and
+    # system_host_keys=False. That accepts any key on every run, which
+    # makes credential-capture MITM trivial. Default to strict checking
+    # against ~/.ssh/known_hosts and let the user opt out explicitly.
+    if strict_host_key:
+        device["ssh_strict"] = True
+        device["system_host_keys"] = True
 
     # key-based auth
     if key_file:
@@ -112,6 +120,9 @@ def connect_to_router(ip, user, password=None, port=22, key_file=None, key_passp
         return conn
     except Exception as e:
         error(f"SSH connection failed: {e}")
+        if strict_host_key and "host key" in str(e).lower():
+            info(f"Pin the host key first: ssh-keyscan -p {port} {ip} >> ~/.ssh/known_hosts")
+            info("Or rerun with --insecure-no-host-key-check (not recommended)")
         sys.exit(1)
 
 
@@ -765,6 +776,7 @@ def run_sara_audit(args):
         port=args.port,
         key_file=key_file,
         key_passphrase=key_passphrase,
+        strict_host_key=not getattr(args, "insecure_no_host_key_check", False),
     )
 
     # system profile
@@ -836,6 +848,7 @@ def run_cve_command(args):
         port=args.port,
         key_file=key_file,
         key_passphrase=key_passphrase,
+        strict_host_key=not getattr(args, "insecure_no_host_key_check", False),
     )
 
     # here we pass connection, not version string
@@ -856,6 +869,11 @@ def main():
     audit.add_argument("profiles", help="Profiles: system,protocols,wifi (comma-separated)")
     audit.add_argument("key", nargs="?", default=None, help="Path to SSH private key (optional)")
     audit.add_argument("port", nargs="?", type=int, default=22, help="SSH port (default: 22)")
+    audit.add_argument(
+        "--insecure-no-host-key-check",
+        action="store_true",
+        help="Disable SSH host-key verification (vulnerable to MITM, use only for one-off enrollment)",
+    )
     audit.set_defaults(func=run_sara_audit)
 
     # CVE mode
@@ -864,6 +882,11 @@ def main():
     cve.add_argument("username_or_version", help="SSH username or RouterOS version string")
     cve.add_argument("key", nargs="?", default=None, help="Path to SSH private key (optional)")
     cve.add_argument("port", nargs="?", type=int, default=22, help="SSH port (default: 22)")
+    cve.add_argument(
+        "--insecure-no-host-key-check",
+        action="store_true",
+        help="Disable SSH host-key verification (vulnerable to MITM, use only for one-off enrollment)",
+    )
     cve.set_defaults(func=run_cve_command)
 
     # no args = help
