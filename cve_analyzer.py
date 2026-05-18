@@ -211,6 +211,18 @@ def is_version_affected(current_v, version_info):
     return True
 
 
+# NVD JSON 2.0 nodes can nest: each node may carry its own cpeMatch list
+# and a children list of further nodes (used for AND/OR combinations like
+# "OS CPE AND hardware CPE"). Walking only one level deep silently drops
+# the RouterOS CPE for any CVE that uses an operator grouping, which is
+# why some real RouterOS CVEs were never matching.
+def _walk_cpe_matches(nodes):
+    for node in nodes or []:
+        for match in node.get("cpeMatch", []) or []:
+            yield match
+        yield from _walk_cpe_matches(node.get("children", []))
+
+
 # Download all RouterOS CVEs from NVD and save locally
 def fetch_all_cves():
     all_cves = []
@@ -257,23 +269,22 @@ def fetch_all_cves():
 
             affected_versions = []
             for config in cve.get("configurations", []):
-                for node in config.get("nodes", []):
-                    for match in node.get("cpeMatch", []):
-                        if not match.get("vulnerable", False):
-                            continue
-                        criteria = match.get("criteria", "") or ""
-                        crit_l = criteria.lower()
-                        if "mikrotik" not in crit_l or "routeros" not in crit_l:
-                            continue
-                        affected_versions.append(
-                            {
-                                "criteria": criteria,
-                                "versionStartIncluding": match.get("versionStartIncluding"),
-                                "versionStartExcluding": match.get("versionStartExcluding"),
-                                "versionEndIncluding": match.get("versionEndIncluding"),
-                                "versionEndExcluding": match.get("versionEndExcluding"),
-                            }
-                        )
+                for match in _walk_cpe_matches(config.get("nodes", [])):
+                    if not match.get("vulnerable", False):
+                        continue
+                    criteria = match.get("criteria", "") or ""
+                    crit_l = criteria.lower()
+                    if "mikrotik" not in crit_l or "routeros" not in crit_l:
+                        continue
+                    affected_versions.append(
+                        {
+                            "criteria": criteria,
+                            "versionStartIncluding": match.get("versionStartIncluding"),
+                            "versionStartExcluding": match.get("versionStartExcluding"),
+                            "versionEndIncluding": match.get("versionEndIncluding"),
+                            "versionEndExcluding": match.get("versionEndExcluding"),
+                        }
+                    )
 
             all_cves.append(
                 {
