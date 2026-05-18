@@ -1,4 +1,4 @@
-from setuptools import setup, find_packages
+from setuptools import setup
 
 setup(
     name="sara",
@@ -6,20 +6,18 @@ setup(
     url="https://github.com/caster0x00/Sara",
     author="Mahama Bazarov",
     author_email="mahamabazarov@mailbox.org",
-    scripts=['sara.py'],
     description="RouterOS Security Inspector",
     long_description=open('README.md', encoding="utf8").read(),
     long_description_content_type='text/markdown',
     license="Apache-2.0",
-    keywords=['mikrotik', 'routeros', 'config analyzer', 'network security', 'cve',],
-    packages=find_packages(),
+    keywords=['mikrotik', 'routeros', 'config analyzer', 'network security', 'cve'],
     install_requires=[
         'colorama',
         'netmiko',
         'packaging',
         'requests',
     ],
-    py_modules=['cve_analyzer'],
+    py_modules=['sara', 'cve_analyzer'],
     entry_points={
         "console_scripts": ["sara = sara:main"],
     },
