@@ -795,40 +795,44 @@ def run_sara_audit(args):
         strict_host_key=not getattr(args, "insecure_no_host_key_check", False),
     )
 
-    # system profile
-    if "system" in profiles:
-        check_routeros_version(connection)
-        check_default_users(connection)
-        check_rmi_services(connection)
-        checking_access_to_RMI(connection)
-        check_poe_status(connection)
-        check_routerboot_protection(connection)
-        check_bandwidth_server_status(connection)
-        check_password_length_policy(connection)
-        check_ssh_security(connection)
-        check_connection_tracking(connection)
-        check_romon_status(connection)
-        check_mac_winbox_security(connection)
-        check_dst_nat_rules(connection)
-        detect_malicious_schedulers(connection)
+    try:
+        # system profile
+        if "system" in profiles:
+            check_routeros_version(connection)
+            check_default_users(connection)
+            check_rmi_services(connection)
+            checking_access_to_RMI(connection)
+            check_poe_status(connection)
+            check_routerboot_protection(connection)
+            check_bandwidth_server_status(connection)
+            check_password_length_policy(connection)
+            check_ssh_security(connection)
+            check_connection_tracking(connection)
+            check_romon_status(connection)
+            check_mac_winbox_security(connection)
+            check_dst_nat_rules(connection)
+            detect_malicious_schedulers(connection)
 
-    # protocols profile
-    if "protocols" in profiles:
-        check_smb(connection)
-        check_upnp_status(connection)
-        check_socks_status(connection)
-        check_dns_status(connection)
-        check_static_dns_entries(connection)
-        check_ddns_status(connection)
-        check_neighbor_discovery(connection)
-        check_snmp(connection)
+        # protocols profile
+        if "protocols" in profiles:
+            check_smb(connection)
+            check_upnp_status(connection)
+            check_socks_status(connection)
+            check_dns_status(connection)
+            check_static_dns_entries(connection)
+            check_ddns_status(connection)
+            check_neighbor_discovery(connection)
+            check_snmp(connection)
 
-    # wifi profile
-    if "wifi" in profiles:
-        check_wifi_security(connection)
-
-    connection.disconnect()
-    print(f"[*] Disconnected from RouterOS ({args.ip})")
+        # wifi profile
+        if "wifi" in profiles:
+            check_wifi_security(connection)
+    finally:
+        try:
+            connection.disconnect()
+        except Exception:
+            pass
+        print(f"[*] Disconnected from RouterOS ({args.ip})")
 
 
 # CVE command dispatcher
@@ -867,11 +871,15 @@ def run_cve_command(args):
         strict_host_key=not getattr(args, "insecure_no_host_key_check", False),
     )
 
-    # here we pass connection, not version string
-    run_cve_audit(connection)
-
-    connection.disconnect()
-    print(f"[*] Disconnected from RouterOS ({ip})")
+    try:
+        # here we pass connection, not version string
+        run_cve_audit(connection)
+    finally:
+        try:
+            connection.disconnect()
+        except Exception:
+            pass
+        print(f"[*] Disconnected from RouterOS ({ip})")
 
 def main():
     banner()
