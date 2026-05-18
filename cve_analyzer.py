@@ -4,7 +4,7 @@
 # Licensed under the Apache 2.0 License
 # This project is not affiliated with or endorsed by SIA Mikrotīkls
 
-import json, re, os, pathlib, requests, time
+import json, re, os, pathlib, requests, time, urllib.parse
 from packaging.version import Version, InvalidVersion
 from colorama import Fore, Style
 
@@ -112,9 +112,15 @@ def pad_l(s: str, width: int) -> str:
     return " " * pad_len + s
 
 
-# Clickable hyperlink (OSC-8)
+# Clickable hyperlink (OSC-8). The text and url are interpolated into a
+# terminal escape sequence; a stray BEL (\x07) or ST (\x1b\\) inside either
+# would close the URL field early and let attacker-controlled bytes (e.g.
+# from a poisoned local CVE cache) pivot the link to an arbitrary target.
+# Percent-encode the URL and strip controls from the visible text.
 def term_link(text: str, url: str) -> str:
-    return f"\x1b]8;;{url}\x1b\\{text}\x1b]8;;\x1b\\"
+    safe_url = urllib.parse.quote(url, safe=":/?&=#%")
+    safe_text = re.sub(r"[\x00-\x1f\x7f]", "?", text)
+    return f"\x1b]8;;{safe_url}\x1b\\{safe_text}\x1b]8;;\x1b\\"
 
 
 # Convert RouterOS version string to Version object
