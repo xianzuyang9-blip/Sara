@@ -6,7 +6,6 @@ setup(
     url="https://github.com/caster0x00/Sara",
     author="Mahama Bazarov",
     author_email="mahamabazarov@mailbox.org",
-    scripts=['sara.py'],
     description="RouterOS Security Inspector",
     long_description=open('README.md', encoding="utf8").read(),
     long_description_content_type='text/markdown',
@@ -19,7 +18,7 @@ setup(
         'packaging',
         'requests',
     ],
-    py_modules=['cve_analyzer'],
+    py_modules=['sara', 'cve_analyzer'],
     entry_points={
         "console_scripts": ["sara = sara:main"],
     },
